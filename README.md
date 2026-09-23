@@ -11,8 +11,15 @@ Requires Android 10 (API 29) or newer.
 ## Build
 
 Requires JDK 17+ and the Android SDK (easiest: open the folder in Android Studio).
-The release build is signed with the debug key so it installs directly; use your own
-signing config before distributing it.
+To sign release builds with your own key, create `keystore.properties` in the project
+root (it is gitignored):
+
+    storeFile=/path/to/release.jks
+    storePassword=...
+    keyAlias=...
+    keyPassword=...
+
+Without it, the release build is signed with the debug key.
 
     ./gradlew assembleRelease     # app/build/outputs/apk/release/app-release.apk
     adb install -r app/build/outputs/apk/release/app-release.apk

@@ -8,3 +8,4 @@ local.properties
 *.jks
 *.keystore
 CLAUDE.local.md
+keystore.properties
