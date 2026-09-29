@@ -1,7 +1,7 @@
 # BT Volume
 
 Sets media volume to a per-device level when a paired Bluetooth device connects,
-and restores the previous volume when it disconnects. Both events post a notification.
+and restores the previous volume when it disconnects. Both events post a notification, which disappears after 30 seconds.
 
 No dependencies beyond the Kotlin stdlib; no background service (a manifest receiver
 for `ACL_CONNECTED` / `ACL_DISCONNECTED` is woken by the system).

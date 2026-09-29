@@ -113,6 +113,7 @@ class BtReceiver : BroadcastReceiver() {
         private const val HOLD_MS = 3_000L
         private const val MAX_STEPS = 200
         private const val STEP_MS = 500L
+        private const val NOTIFICATION_TIMEOUT_MS = 30_000L
 
         private val MEDIA = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build()
 
@@ -181,6 +182,7 @@ class BtReceiver : BroadcastReceiver() {
                 .setContentTitle(title)
                 .setContentText(text)
                 .setAutoCancel(true)
+                .setTimeoutAfter(NOTIFICATION_TIMEOUT_MS)
                 .build()
             // Silently dropped by the system if POST_NOTIFICATIONS was denied.
             context.getSystemService(NotificationManager::class.java).notify(address.hashCode(), n)
