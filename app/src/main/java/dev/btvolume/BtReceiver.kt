@@ -51,17 +51,29 @@ class BtReceiver : BroadcastReceiver() {
         // ACL comes up before the A2DP route, and STREAM_MUSIC volume is kept per output
         // device: wait until media actually plays on the headset, or the change lands on
         // the speaker and is replaced by the headset's remembered volume.
-        val routed = waitUntil { am.isMediaRoutedTo(address) }
+        val routed = waitUntil(WAIT_MS) { am.isMediaRoutedTo(address) }
         Log.i(TAG, "routed=$routed ${am.describeRoute()}")
         val target = toIndex(am, percent)
-        val actual = applyVolume(am, target)
 
-        notify(
-            context, address,
-            "${device.label()} connected",
-            if (close(am, actual, target)) "Volume set to ${toPercent(am, actual)}% (was ${toPercent(am, previous)}%)"
-            else "Tried $percent%, but volume is ${toPercent(am, actual)}%",
-        )
+        fun apply() {
+            val actual = applyVolume(am, target)
+            notify(
+                context, address,
+                "${device.label()} connected",
+                if (close(am, actual, target)) "Volume set to ${toPercent(am, actual)}% (was ${toPercent(am, previous)}%)"
+                else "Tried $percent%, but volume is ${toPercent(am, actual)}%",
+            )
+        }
+        apply()
+        if (!routed) return
+
+        // Some devices close the media link a few seconds after opening it but stay connected
+        // for calls (seen with a car kit). Media then plays on the phone speaker: set it there too.
+        if (!waitUntil(DROP_WAIT_MS) { !am.isMediaRoutedTo(address) }) return
+        SystemClock.sleep(DROP_GRACE_MS) // on a real disconnect, the call link follows shortly
+        if (!am.isConnectedTo(address)) return
+        Log.i(TAG, "media left $address, still connected ${am.describeRoute()}")
+        apply()
     }
 
     private fun onDisconnected(context: Context, prefs: Prefs, device: BluetoothDevice) {
@@ -71,7 +83,7 @@ class BtReceiver : BroadcastReceiver() {
         val am = context.getSystemService(AudioManager::class.java)
         // Wait for audio to fall back to the phone before restoring. The BT output can
         // linger for a moment after ACL_DISCONNECTED.
-        val routed = waitUntil { !am.isMediaRoutedTo(address) }
+        val routed = waitUntil(WAIT_MS) { !am.isMediaRoutedTo(address) }
         Log.i(TAG, "disconnected $address, unrouted=$routed ${am.describeRoute()}")
         val actual = applyVolume(am, previous)
         prefs.setSaved(address, null)
@@ -107,10 +119,13 @@ class BtReceiver : BroadcastReceiver() {
         const val STREAM = AudioManager.STREAM_MUSIC
         private const val TAG = "BtVolume"
         private const val CHANNEL = "volume"
-        // Headsets can take several seconds to bring up A2DP after ACL. WAIT_MS + HOLD_MS
-        // stays well within the 60 s goAsync() budget of a background broadcast.
+        // Headsets can take several seconds to bring up A2DP after ACL. The worst case,
+        // WAIT_MS + DROP_WAIT_MS + DROP_GRACE_MS + 2 * HOLD_MS (about 42 s), stays within the
+        // 60 s goAsync() budget of a background broadcast.
         private const val WAIT_MS = 25_000L
         private const val HOLD_MS = 3_000L
+        private const val DROP_WAIT_MS = 10_000L
+        private const val DROP_GRACE_MS = 1_000L
         private const val MAX_STEPS = 200
         private const val STEP_MS = 500L
         private const val NOTIFICATION_TIMEOUT_MS = 30_000L
@@ -189,8 +204,8 @@ class BtReceiver : BroadcastReceiver() {
         }
 
         /** Returns whether the condition was met before the timeout. */
-        private fun waitUntil(condition: () -> Boolean): Boolean {
-            val deadline = SystemClock.uptimeMillis() + WAIT_MS
+        private fun waitUntil(timeoutMs: Long, condition: () -> Boolean): Boolean {
+            val deadline = SystemClock.uptimeMillis() + timeoutMs
             while (!condition()) {
                 if (SystemClock.uptimeMillis() >= deadline) return false
                 SystemClock.sleep(250)
@@ -214,10 +229,15 @@ class BtReceiver : BroadcastReceiver() {
             else getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList()
 
         private fun AudioManager.isMediaRoutedTo(address: String): Boolean =
-            mediaOutputs().any {
-                // Compare the tail only: addresses may be partially anonymized.
-                it.type in BT_OUTPUTS && it.address.takeLast(5).equals(address.takeLast(5), true)
-            }
+            mediaOutputs().any { it.isBluetooth(address) }
+
+        /** Whether the device has any audio link left, e.g. only the call (SCO) link. */
+        private fun AudioManager.isConnectedTo(address: String): Boolean =
+            getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.isBluetooth(address) }
+
+        // Compare the tail only: addresses may be partially anonymized.
+        private fun AudioDeviceInfo.isBluetooth(address: String): Boolean =
+            type in BT_OUTPUTS && this.address.takeLast(5).equals(address.takeLast(5), true)
 
         private fun AudioManager.describeRoute(): String =
             mediaOutputs().joinToString(prefix = "[", postfix = "]") { "${it.type}/${it.address}" } +

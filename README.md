@@ -41,6 +41,9 @@ the nearest step (1/16 of the range on ColorOS), e.g. 72% when 70% is set.
 Some headsets bring up the audio link well after the Bluetooth connection (about 15 s for a
 Bose QC Ultra), so the app waits up to 25 s for audio to move to the headset.
 
+Some car kits close the media link a few seconds after connecting and stay connected only for
+calls. Media then plays on the phone speaker, so the app sets the level there too.
+
 Other volume apps (e.g. Bluetooth Volume Manager) react to the same events; don't let both
 manage the same device.
 
